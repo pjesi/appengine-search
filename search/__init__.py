@@ -254,7 +254,7 @@ class Searchable(object):
     INDEX_USES_MULTI_ENTITIES = True
 
     @staticmethod
-    def full_text_search(phrase, offset=0, limit=10, 
+    def full_text_search(phrase, offset=0, limit=10, count_entities=False,
                          kind=None, 
                          stemming=INDEX_STEMMING,
                          multi_word_literal=INDEX_MULTI_WORD,
@@ -271,6 +271,7 @@ class Searchable(object):
 
         TODO -- Should provide feedback if input search phrase has stop words, etc.
         """
+        count = 0
         index_keys = []
         keywords = PUNCTUATION_REGEX.sub(' ', phrase).lower().split()
         if stemming:
@@ -297,6 +298,8 @@ class Searchable(object):
                 query = query.filter('phrases =', phrase)
             if kind:
                 query = query.filter('parent_kind =', kind)
+            if count_entities:    
+            	count = query.count()    
             index_keys = query.fetch(limit=limit, offset=offset)
 
         if len(index_keys) < limit:
@@ -309,11 +312,16 @@ class Searchable(object):
                 query = query.filter('phrases =', keyword)
             if kind:
                 query = query.filter('parent_kind =', kind)
+            if count_entities:
+            	count = count + query.count()
             single_word_matches = [key for key in query.fetch(limit=new_limit, offset=offset) \
                                    if key not in index_keys]
             index_keys.extend(single_word_matches)
 
-        return [(key.parent(), SearchIndex.get_title(key.name())) for key in index_keys]
+        keys = [(key.parent(), SearchIndex.get_title(key.name())) for key in index_keys]
+        if count_entities:
+        	return (keys, count)
+        return keys
 
     @classmethod
     def get_simple_search_phraseset(cls, text):
@@ -399,7 +407,7 @@ class Searchable(object):
         return phrases
 
     @classmethod
-    def search(cls, phrase, offset=0, limit=10, keys_only=False):
+    def search(cls, phrase, offset=0, limit=10, keys_only=False, count_entities = False):
         """Queries search indices for phrases using a merge-join.
         
         Use of this class method lets you easily restrict searches to a kind
@@ -415,14 +423,19 @@ class Searchable(object):
             If keys_only is False, the list holds Model instances.
         """
         key_list = Searchable.full_text_search(
-                        phrase, offset=offset, limit=limit, kind=cls.kind(),
+                        phrase, offset=offset, limit=limit, 
+                        count_entities=count_entities,
+                        kind=cls.kind(),
                         stemming=cls.INDEX_STEMMING, 
                         multi_word_literal=cls.INDEX_MULTI_WORD)
         if keys_only:
             logging.debug("key_list: %s", key_list)
             return key_list
+        if count_entities:
+        	return ([cls.get(key_and_title[0]) for key_and_title in key_list[0]], key_list[1])    
         else:
-            return [cls.get(key_and_title[0]) for key_and_title in key_list]
+        	return [cls.get(key_and_title[0]) for key_and_title in key_list]    
+        
 
     def indexed_title_changed(self):
         """Renames index entities for this model to match new title."""
