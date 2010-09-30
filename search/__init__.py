@@ -258,6 +258,7 @@ class Searchable(object):
                          kind=None, 
                          stemming=INDEX_STEMMING,
                          multi_word_literal=INDEX_MULTI_WORD,
+                         literal_phrases=[]
                          ):
         """Queries search indices for phrases using a merge-join.
         
@@ -296,6 +297,9 @@ class Searchable(object):
                 if stemming:
                     phrase = stemmer.stemWord(phrase)
                 query = query.filter('phrases =', phrase)
+            for phrase in literal_phrases:
+            	query = query.filter('phrases = ', phrase)
+                
             if kind:
                 query = query.filter('parent_kind =', kind)
             if count_entities:    
@@ -310,6 +314,8 @@ class Searchable(object):
             query = klass.all(keys_only=True)
             for keyword in keywords:
                 query = query.filter('phrases =', keyword)
+            for phrase in literal_phrases:
+            	query = query.filter('phrases = ', phrase)
             if kind:
                 query = query.filter('parent_kind =', kind)
             if count_entities:
@@ -407,7 +413,7 @@ class Searchable(object):
         return phrases
 
     @classmethod
-    def search(cls, phrase, offset=0, limit=10, keys_only=False, count_entities = False):
+    def search(cls, phrase, offset=0, limit=10, keys_only=False, count_entities = False, literal_phrases=[]):
         """Queries search indices for phrases using a merge-join.
         
         Use of this class method lets you easily restrict searches to a kind
@@ -427,6 +433,7 @@ class Searchable(object):
                         count_entities=count_entities,
                         kind=cls.kind(),
                         stemming=cls.INDEX_STEMMING, 
+                        literal_phrases=literal_phrases,
                         multi_word_literal=cls.INDEX_MULTI_WORD)
         if keys_only:
             logging.debug("key_list: %s", key_list)
@@ -496,7 +503,7 @@ class Searchable(object):
                             phrases.update(words)
         return list(phrases)
 
-    def index(self, indexing_func=None):
+    def index(self, indexing_func=None, extra_phrases=[]):
         """Generates or replaces a search entities for a Model instance.
 
         Args (optional):
@@ -506,6 +513,7 @@ class Searchable(object):
         search phrase generation.
         """
         search_phrases = self.get_search_phrases(indexing_func=indexing_func)
+        search_phrases.extend(extra_phrases)
 
         key = self.key()
         klass = StemmedIndex if self.INDEX_STEMMING else LiteralIndex
